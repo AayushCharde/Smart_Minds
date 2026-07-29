@@ -1,0 +1,59 @@
+# ─── HireMinds AI — Docker Compose ───────────────────────────────────────────
+# Run the full stack: frontend + backend
+#
+# Usage:
+#   docker compose up --build        # Build and start all services
+#   docker compose up -d             # Start in background
+#   docker compose logs -f backend   # Follow backend logs
+#   docker compose down              # Stop all services
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ─── Backend (Flask API) ───
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: hireminds-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - resume-data:/app/data/resumes
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - hireminds
+
+  # ─── Frontend (React + Nginx) ───
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY}
+    container_name: hireminds-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - hireminds
+
+volumes:
+  resume-data:
+    driver: local
+
+networks:
+  hireminds:
+    driver: bridge

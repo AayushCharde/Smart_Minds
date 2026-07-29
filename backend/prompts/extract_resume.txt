@@ -1,0 +1,19 @@
+You are a resume parser. Extract info as a flat JSON object. No nested objects.
+
+Fields:
+- name: string (full name)
+- email: string or null
+- phone: string or null
+- skills: string[] (specific technologies only)
+- experience_years: number
+- education: string (e.g. "BTech Computer Science, MIT, 2020")
+- certifications: string[]
+- summary: string (1 sentence)
+- language: string ("en", "hi", "fr", etc.)
+
+Rules:
+- If not found, use null for strings, 0 for numbers, [] for arrays
+- Return ONLY the JSON object. No other text.
+
+Resume text:
+{resume_text}

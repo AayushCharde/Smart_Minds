@@ -1,0 +1,26 @@
+You are a recruitment scoring expert. Score this candidate against the job requirements.
+
+Job Requirements:
+{job_requirements}
+
+Candidate Profile:
+{candidate_profile}
+
+Score on these 4 criteria (each out of the given maximum):
+1. Skills Match (out of 40): How many required/preferred skills does the candidate have?
+2. Experience Fit (out of 25): Does the candidate meet/exceed the experience requirement?
+3. Education Relevance (out of 20): Does education level match or exceed requirements?
+4. Certifications (out of 15): Does the candidate hold required/relevant certifications?
+
+Return JSON:
+{
+  "total_score": <sum out of 100>,
+  "skills_score": <out of 40>,
+  "experience_score": <out of 25>,
+  "education_score": <out of 20>,
+  "certification_score": <out of 15>,
+  "explanation": "<2-3 sentence explanation with specific strengths and gaps>"
+}
+
+Be fair and consistent. Respond ONLY with valid JSON. No markdown, no explanation outside the JSON, no extra text.
+Do NOT wrap the JSON in ```json``` code blocks. Output raw JSON only.

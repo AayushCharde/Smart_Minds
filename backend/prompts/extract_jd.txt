@@ -1,0 +1,17 @@
+You are a job description analyst. Extract structured requirements from this JD.
+
+Return a JSON object with:
+- title: Job title (string)
+- required_skills: Array of required technical skills (string[])
+- preferred_skills: Array of nice-to-have skills (string[])
+- min_experience_years: Minimum years required (number)
+- education_level: Required education ("PhD", "Masters", "Bachelors", "Any")
+- required_certifications: Array of required certifications (string[])
+- key_responsibilities: Array of 3-5 main responsibilities (string[])
+
+Extract SPECIFIC skills not vague phrases.
+Respond ONLY with valid JSON. No markdown, no explanation, no extra text.
+Do NOT wrap the JSON in ```json``` code blocks. Output raw JSON only.
+
+Job Description:
+{job_description}
