@@ -6,6 +6,7 @@
   <img src="https://img.shields.io/badge/Supabase-PostgreSQL-3FCF8E?logo=supabase&logoColor=white" alt="Supabase" />
   <img src="https://img.shields.io/badge/Clerk-Auth-6C47FF?logo=clerk&logoColor=white" alt="Clerk" />
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker" />
+  <img src="https://img.shields.io/badge/License-MIT-22C55E" alt="MIT License" />
 </p>
 
 # HireMinds AI
@@ -33,6 +34,7 @@ HireMinds AI is a full-stack monorepo application built with React and Flask tha
 - [Data Flow](#data-flow)
 - [Configuration Reference](#configuration-reference)
 - [Contributing](#contributing)
+- [License](#license)
 
 ---
 
@@ -432,6 +434,12 @@ The backend validates configuration at startup and will:
 
 ---
 
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
+---
+
 <p align="center">
-  Built with Llama 3.3 70B on <a href="https://console.groq.com">Groq</a>
+  Built with Llama 3.3 70B on <a href="https://console.groq.com">Groq</a> · Maintained by <a href="https://github.com/AayushCharde">Aayush Charde</a>
 </p>
