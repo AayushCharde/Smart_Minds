@@ -1,4 +1,5 @@
 <p align="center">
+  <a href="https://github.com/AayushCharde/Smart_Minds/actions/workflows/ci.yml"><img src="https://github.com/AayushCharde/Smart_Minds/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <img src="https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=white" alt="React 18" />
   <img src="https://img.shields.io/badge/Flask-3.1-000000?logo=flask&logoColor=white" alt="Flask" />
   <img src="https://img.shields.io/badge/Llama_3.3-70B-7C3AED?logo=meta&logoColor=white" alt="Llama 3.3 70B" />

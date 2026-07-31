@@ -4,6 +4,7 @@ Job matching engine — LLM-powered candidate scoring with parallel execution.
 Pipeline: JD text → LLM requirement extraction → per-candidate LLM scoring → rankings.
 Uses ThreadPoolExecutor for parallel scoring (MAX_WORKERS configurable).
 """
+
 import os
 import json
 import uuid
@@ -15,7 +16,7 @@ from models.database import get_supabase
 
 logger = logging.getLogger(__name__)
 
-PROMPTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'prompts')
+PROMPTS_DIR = os.path.join(os.path.dirname(__file__), "..", "prompts")
 
 # Score up to 4 candidates in parallel for faster matching
 MAX_WORKERS = int(os.getenv("MATCH_MAX_WORKERS", "4"))
@@ -28,7 +29,7 @@ def _get_prompt(name: str) -> str:
     """Load and cache prompt template from disk."""
     if name not in _prompt_cache:
         path = os.path.join(PROMPTS_DIR, name)
-        with open(path, 'r') as f:
+        with open(path, "r") as f:
             _prompt_cache[name] = f.read()
     return _prompt_cache[name]
 
@@ -42,21 +43,20 @@ def _make_fallback_scores(reason: str) -> dict:
         "education_score": 0,
         "certification_score": 0,
         "explanation": str(reason),
-        "badge": "weak"
+        "badge": "weak",
     }
 
 
 def extract_job_requirements(description: str) -> dict:
     """Extract structured requirements from a job description using LLM."""
-    prompt_template = _get_prompt('extract_jd.txt')
+    prompt_template = _get_prompt("extract_jd.txt")
     prompt = prompt_template.replace("{job_description}", description)
 
     last_error = None
     for attempt in range(3):
         try:
             system_prompt = (
-                "You are a JSON API. Output ONLY raw JSON. No markdown, no explanation. "
-                "Start your response with {"
+                "You are a JSON API. Output ONLY raw JSON. No markdown, no explanation. " "Start your response with {"
             )
             if attempt > 0:
                 system_prompt += " CRITICAL: Previous response was invalid. Output NOTHING except a valid JSON object."
@@ -94,36 +94,33 @@ def _normalize_scores(result: dict) -> dict:
         or result.get("skills_match")
         or result.get("skills_match_score")
         or result.get("skills"),
-        max_val=40
+        max_val=40,
     )
     experience = _to_int(
         result.get("experience_score")
         or result.get("experience_fit")
         or result.get("experience_fit_score")
         or result.get("experience"),
-        max_val=25
+        max_val=25,
     )
     education = _to_int(
         result.get("education_score")
         or result.get("education_relevance")
         or result.get("education_relevance_score")
         or result.get("education"),
-        max_val=20
+        max_val=20,
     )
     certification = _to_int(
         result.get("certification_score")
         or result.get("certifications_score")
         or result.get("certifications")
         or result.get("cert_score"),
-        max_val=15
+        max_val=15,
     )
 
     total = _to_int(
-        result.get("total_score")
-        or result.get("score")
-        or result.get("overall_score")
-        or result.get("total"),
-        max_val=100
+        result.get("total_score") or result.get("score") or result.get("overall_score") or result.get("total"),
+        max_val=100,
     )
 
     # If total is 0 but sub-scores exist, compute from sub-scores
@@ -151,21 +148,24 @@ def _normalize_scores(result: dict) -> dict:
 
 def score_candidate(candidate: dict, requirements: dict) -> dict:
     """Score a single candidate against job requirements. Retries up to 3 times."""
-    prompt_template = _get_prompt('score_candidate.txt')
+    prompt_template = _get_prompt("score_candidate.txt")
 
-    candidate_profile = json.dumps({
-        "name": candidate.get("name", "Unknown"),
-        "skills": candidate.get("skills") or [],
-        "experience_years": candidate.get("experience_years", 0),
-        "education": candidate.get("education"),
-        "certifications": candidate.get("certifications") or [],
-        "summary": candidate.get("summary", "")
-    }, indent=2)
+    candidate_profile = json.dumps(
+        {
+            "name": candidate.get("name", "Unknown"),
+            "skills": candidate.get("skills") or [],
+            "experience_years": candidate.get("experience_years", 0),
+            "education": candidate.get("education"),
+            "certifications": candidate.get("certifications") or [],
+            "summary": candidate.get("summary", ""),
+        },
+        indent=2,
+    )
 
     prompt = prompt_template.replace("{job_requirements}", json.dumps(requirements, indent=2))
     prompt = prompt.replace("{candidate_profile}", candidate_profile)
 
-    candidate_name = candidate.get('name', 'Unknown')
+    candidate_name = candidate.get("name", "Unknown")
     last_error = None
 
     for attempt in range(3):
@@ -176,9 +176,7 @@ def score_candidate(candidate: dict, requirements: dict) -> dict:
                 "certification_score, explanation. All scores are integers."
             )
             if attempt > 0:
-                system_prompt += (
-                    " CRITICAL: Previous response was invalid. Output NOTHING except a valid JSON object."
-                )
+                system_prompt += " CRITICAL: Previous response was invalid. Output NOTHING except a valid JSON object."
 
             raw_result = call_llm_json(prompt, system_prompt=system_prompt, think=False, max_tokens=1024)
             normalized = _normalize_scores(raw_result)
@@ -218,29 +216,22 @@ def match_candidates(user_id: str, title: str, description: str) -> dict:
 
     # Step 2: Save job to DB
     job_id = str(uuid.uuid4())
-    sb.table("jobs").insert({
-        "id": job_id,
-        "user_id": user_id,
-        "title": title,
-        "description": description,
-        "requirements": requirements
-    }).execute()
+    sb.table("jobs").insert(
+        {"id": job_id, "user_id": user_id, "title": title, "description": description, "requirements": requirements}
+    ).execute()
 
     # Step 3: Get all candidates (exclude raw_text for scoring — not needed)
     candidates = (
         sb.table("candidates")
         .select("id, name, skills, experience_years, education, certifications, summary")
         .eq("user_id", user_id)
-        .execute().data
+        .execute()
+        .data
     )
 
     if not candidates:
         logger.info("No candidates found for user")
-        return {
-            "job_id": job_id,
-            "requirements": requirements,
-            "rankings": []
-        }
+        return {"job_id": job_id, "requirements": requirements, "rankings": []}
 
     logger.info(f"Scoring {len(candidates)} candidates (max {MAX_WORKERS} in parallel)...")
 
@@ -249,8 +240,7 @@ def match_candidates(user_id: str, title: str, description: str) -> dict:
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         future_to_candidate = {
-            executor.submit(score_candidate, candidate, requirements): candidate
-            for candidate in candidates
+            executor.submit(score_candidate, candidate, requirements): candidate for candidate in candidates
         }
 
         for future in as_completed(future_to_candidate):
@@ -269,30 +259,34 @@ def match_candidates(user_id: str, title: str, description: str) -> dict:
     for candidate in candidates:
         cand, scores = results_map[candidate["id"]]
 
-        score_rows.append({
-            "id": str(uuid.uuid4()),
-            "candidate_id": candidate["id"],
-            "job_id": job_id,
-            "total_score": scores["total_score"],
-            "skills_score": scores["skills_score"],
-            "experience_score": scores["experience_score"],
-            "education_score": scores["education_score"],
-            "certification_score": scores["certification_score"],
-            "explanation": scores["explanation"],
-            "badge": scores["badge"]
-        })
+        score_rows.append(
+            {
+                "id": str(uuid.uuid4()),
+                "candidate_id": candidate["id"],
+                "job_id": job_id,
+                "total_score": scores["total_score"],
+                "skills_score": scores["skills_score"],
+                "experience_score": scores["experience_score"],
+                "education_score": scores["education_score"],
+                "certification_score": scores["certification_score"],
+                "explanation": scores["explanation"],
+                "badge": scores["badge"],
+            }
+        )
 
-        rankings.append({
-            "candidate_id": candidate["id"],
-            "candidate_name": candidate["name"],
-            "score": scores["total_score"],
-            "skills_score": scores["skills_score"],
-            "experience_score": scores["experience_score"],
-            "education_score": scores["education_score"],
-            "certification_score": scores["certification_score"],
-            "explanation": scores["explanation"],
-            "badge": scores["badge"]
-        })
+        rankings.append(
+            {
+                "candidate_id": candidate["id"],
+                "candidate_name": candidate["name"],
+                "score": scores["total_score"],
+                "skills_score": scores["skills_score"],
+                "experience_score": scores["experience_score"],
+                "education_score": scores["education_score"],
+                "certification_score": scores["certification_score"],
+                "explanation": scores["explanation"],
+                "badge": scores["badge"],
+            }
+        )
 
     # Step 6: Batch-insert all scores
     if score_rows:
@@ -302,13 +296,6 @@ def match_candidates(user_id: str, title: str, description: str) -> dict:
     rankings.sort(key=lambda x: x["score"], reverse=True)
 
     elapsed = time.monotonic() - start_time
-    logger.info(
-        f"Matched {len(rankings)} candidates against job '{title}' "
-        f"(job_id={job_id}, {elapsed:.1f}s)"
-    )
+    logger.info(f"Matched {len(rankings)} candidates against job '{title}' " f"(job_id={job_id}, {elapsed:.1f}s)")
 
-    return {
-        "job_id": job_id,
-        "requirements": requirements,
-        "rankings": rankings
-    }
+    return {"job_id": job_id, "requirements": requirements, "rankings": rankings}

@@ -10,6 +10,7 @@ Key behaviors:
 - Robust JSON extraction with brace-matching and truncation repair
 - 3 retry attempts for transient failures
 """
+
 import re
 import json
 import time
@@ -20,7 +21,7 @@ from config import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, LLM_MAX_TOKENS, LLM_TIM
 logger = logging.getLogger(__name__)
 
 # Pre-compiled regex for <think> tag stripping (used frequently)
-_THINK_TAG_RE = re.compile(r'<think>.*?</think>', re.DOTALL)
+_THINK_TAG_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 
 # OpenAI-compatible client — connects to the configured LLM provider (Groq by default)
 client = OpenAI(
@@ -56,8 +57,7 @@ def _classify_error(e: Exception) -> Exception:
         )
     if "401" in error_msg or "403" in error_msg or "Unauthorized" in error_msg:
         return ConnectionError(
-            f"Authentication failed for LLM at {LLM_BASE_URL}. "
-            f"Check your LLM_API_KEY in the .env file."
+            f"Authentication failed for LLM at {LLM_BASE_URL}. " f"Check your LLM_API_KEY in the .env file."
         )
     return e
 
@@ -90,7 +90,7 @@ def call_llm(prompt: str, system_prompt: str = "", think: bool = False, max_toke
     content = response.choices[0].message.content or ""
 
     # Strip any <think>...</think> reasoning blocks (defensive; no-op for Llama)
-    content = _THINK_TAG_RE.sub('', content).strip()
+    content = _THINK_TAG_RE.sub("", content).strip()
 
     if not content:
         raise ValueError("LLM returned an empty response (think block may have consumed all tokens)")
@@ -130,14 +130,14 @@ def call_llm_stream(prompt: str, system_prompt: str = "", think: bool = True, ma
         delta = chunk.choices[0].delta
 
         # Extract content — check both standard and reasoning fields
-        content = getattr(delta, 'content', None) or None
-        reasoning = getattr(delta, 'reasoning_content', None) or None
+        content = getattr(delta, "content", None) or None
+        reasoning = getattr(delta, "reasoning_content", None) or None
 
         # Fallback: check raw dict if SDK doesn't map reasoning_content
         if content is None and reasoning is None:
-            raw = getattr(delta, 'model_extra', None) or {}
-            content = raw.get('content')
-            reasoning = raw.get('reasoning_content')
+            raw = getattr(delta, "model_extra", None) or {}
+            content = raw.get("content")
+            reasoning = raw.get("reasoning_content")
 
         # Yield answer content verbatim (preserve inter-token whitespace);
         # reasoning tokens, when a provider sends them separately, are skipped.
@@ -175,7 +175,7 @@ def _extract_json(raw: str) -> str:
         if escape_next:
             escape_next = False
             continue
-        if ch == '\\' and in_string:
+        if ch == "\\" and in_string:
             escape_next = True
             continue
         if ch == '"':
@@ -183,22 +183,22 @@ def _extract_json(raw: str) -> str:
             continue
         if in_string:
             continue
-        if ch == '{':
+        if ch == "{":
             depth += 1
-        elif ch == '}':
+        elif ch == "}":
             depth -= 1
             if depth == 0:
                 end = i
                 break
 
-    extracted = raw[start:end + 1]
+    extracted = raw[start : end + 1]
 
     # If JSON was truncated (no closing brace found), try to fix
     if depth > 0:
-        extracted = extracted.rstrip(', \n\t')
+        extracted = extracted.rstrip(", \n\t")
         if extracted.count('"') % 2 == 1:
             extracted += '"'
-        extracted += '}' * depth
+        extracted += "}" * depth
 
     return extracted
 
@@ -218,7 +218,7 @@ def call_llm_json(prompt: str, system_prompt: str = "", think: bool = False, max
         return json.loads(cleaned)
     except json.JSONDecodeError:
         # Fix common LLM JSON mistakes
-        fixed = re.sub(r',\s*([}\]])', r'\1', cleaned)  # trailing commas
+        fixed = re.sub(r",\s*([}\]])", r"\1", cleaned)  # trailing commas
         fixed = fixed.replace("'", '"')  # single quotes → double
         try:
             return json.loads(fixed)

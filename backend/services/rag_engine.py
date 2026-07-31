@@ -4,6 +4,7 @@ Lightweight RAG engine — keyword-based search over Supabase raw_text.
 Uses ~0 extra RAM. No vector DB or embedding models required.
 Pipeline: question → keyword extraction → candidate scoring → excerpt extraction → LLM synthesis.
 """
+
 import os
 import re
 import logging
@@ -11,7 +12,7 @@ from config import RAG_TOP_K, RAG_MAX_PROMPT_CHARS
 
 logger = logging.getLogger(__name__)
 
-PROMPTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'prompts')
+PROMPTS_DIR = os.path.join(os.path.dirname(__file__), "..", "prompts")
 
 RAG_SYSTEM_PROMPT = (
     "You are a helpful recruitment assistant. "
@@ -23,26 +24,134 @@ RAG_SYSTEM_PROMPT = (
 _rag_prompt_cache = None
 
 # Pre-compiled regex for keyword extraction
-_KEYWORD_RE = re.compile(r'[a-zA-Z0-9+#.]+')
+_KEYWORD_RE = re.compile(r"[a-zA-Z0-9+#.]+")
 
 # Stop words for keyword extraction (frozen set for O(1) lookup)
-_STOP_WORDS = frozenset({
-    'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-    'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-    'should', 'may', 'might', 'can', 'shall', 'must', 'need',
-    'i', 'me', 'my', 'we', 'our', 'you', 'your', 'he', 'she', 'it',
-    'they', 'them', 'their', 'this', 'that', 'these', 'those',
-    'what', 'which', 'who', 'whom', 'when', 'where', 'why', 'how',
-    'all', 'each', 'every', 'both', 'few', 'more', 'most', 'some', 'any',
-    'and', 'but', 'or', 'nor', 'not', 'so', 'yet', 'if', 'then',
-    'for', 'of', 'in', 'on', 'at', 'to', 'from', 'by', 'with', 'about',
-    'into', 'through', 'during', 'before', 'after', 'above', 'below',
-    'up', 'down', 'out', 'off', 'over', 'under', 'again', 'further',
-    'there', 'here', 'no', 'yes', 'just', 'also', 'very', 'too',
-    'tell', 'show', 'find', 'get', 'give', 'list', 'many', 'much',
-    'candidates', 'candidate', 'resume', 'resumes', 'person', 'people',
-    'anyone', 'someone', 'everybody', 'please', 'thanks',
-})
+_STOP_WORDS = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "could",
+        "should",
+        "may",
+        "might",
+        "can",
+        "shall",
+        "must",
+        "need",
+        "i",
+        "me",
+        "my",
+        "we",
+        "our",
+        "you",
+        "your",
+        "he",
+        "she",
+        "it",
+        "they",
+        "them",
+        "their",
+        "this",
+        "that",
+        "these",
+        "those",
+        "what",
+        "which",
+        "who",
+        "whom",
+        "when",
+        "where",
+        "why",
+        "how",
+        "all",
+        "each",
+        "every",
+        "both",
+        "few",
+        "more",
+        "most",
+        "some",
+        "any",
+        "and",
+        "but",
+        "or",
+        "nor",
+        "not",
+        "so",
+        "yet",
+        "if",
+        "then",
+        "for",
+        "of",
+        "in",
+        "on",
+        "at",
+        "to",
+        "from",
+        "by",
+        "with",
+        "about",
+        "into",
+        "through",
+        "during",
+        "before",
+        "after",
+        "above",
+        "below",
+        "up",
+        "down",
+        "out",
+        "off",
+        "over",
+        "under",
+        "again",
+        "further",
+        "there",
+        "here",
+        "no",
+        "yes",
+        "just",
+        "also",
+        "very",
+        "too",
+        "tell",
+        "show",
+        "find",
+        "get",
+        "give",
+        "list",
+        "many",
+        "much",
+        "candidates",
+        "candidate",
+        "resume",
+        "resumes",
+        "person",
+        "people",
+        "anyone",
+        "someone",
+        "everybody",
+        "please",
+        "thanks",
+    }
+)
 
 
 def delete_candidate_chunks(candidate_id: str):
@@ -74,7 +183,7 @@ def _get_relevant_excerpt(raw_text: str, keywords: list, max_chars: int = 2000) 
     if not raw_text or not keywords:
         return raw_text[:max_chars] if raw_text else ""
 
-    lines = raw_text.split('\n')
+    lines = raw_text.split("\n")
     scored_lines = []
     for i, line in enumerate(lines):
         stripped = line.strip()
@@ -91,10 +200,10 @@ def _get_relevant_excerpt(raw_text: str, keywords: list, max_chars: int = 2000) 
     top_lines = scored_lines[:20]
     top_lines.sort(key=lambda x: x[1])
 
-    excerpt = '\n'.join(line for _, _, line in top_lines)
+    excerpt = "\n".join(line for _, _, line in top_lines)
 
     if len(excerpt) > max_chars:
-        excerpt = excerpt[:max_chars] + '...'
+        excerpt = excerpt[:max_chars] + "..."
 
     return excerpt or raw_text[:max_chars]
 
@@ -103,7 +212,7 @@ def _get_rag_template() -> str:
     """Load and cache the RAG QA prompt template."""
     global _rag_prompt_cache
     if _rag_prompt_cache is None:
-        with open(os.path.join(PROMPTS_DIR, 'rag_qa.txt'), 'r') as f:
+        with open(os.path.join(PROMPTS_DIR, "rag_qa.txt"), "r") as f:
             _rag_prompt_cache = f.read()
     return _rag_prompt_cache
 
@@ -120,12 +229,7 @@ def _build_rag_prompt(user_id: str, question: str, conversation_history: list = 
     sb = get_supabase()
 
     # Fetch candidates with raw_text (needed for keyword search)
-    candidates = (
-        sb.table("candidates")
-        .select("id, name, filename, raw_text")
-        .eq("user_id", user_id)
-        .execute().data
-    )
+    candidates = sb.table("candidates").select("id, name, filename, raw_text").eq("user_id", user_id).execute().data
 
     if not candidates:
         return None, []
@@ -174,11 +278,7 @@ def _build_rag_prompt(user_id: str, question: str, conversation_history: list = 
 
     # Truncate if too long (preserve the question at the end)
     if len(prompt) > RAG_MAX_PROMPT_CHARS:
-        prompt = (
-            prompt[:RAG_MAX_PROMPT_CHARS]
-            + "\n\n[Context truncated]\n\nUser's question: "
-            + question
-        )
+        prompt = prompt[:RAG_MAX_PROMPT_CHARS] + "\n\n[Context truncated]\n\nUser's question: " + question
 
     return prompt, sources
 
@@ -192,20 +292,12 @@ def query_resumes(user_id: str, question: str, conversation_history: list = None
     if prompt is None:
         return {
             "answer": "No resumes have been uploaded yet. Upload some resumes first, then ask me anything about your candidates!",
-            "sources": []
+            "sources": [],
         }
 
-    answer = call_llm(
-        prompt,
-        system_prompt=RAG_SYSTEM_PROMPT,
-        think=False,
-        max_tokens=1024
-    )
+    answer = call_llm(prompt, system_prompt=RAG_SYSTEM_PROMPT, think=False, max_tokens=1024)
 
-    return {
-        "answer": answer,
-        "sources": sources
-    }
+    return {"answer": answer, "sources": sources}
 
 
 def query_resumes_stream(user_id: str, question: str, conversation_history: list = None, think: bool = True):
@@ -223,7 +315,10 @@ def query_resumes_stream(user_id: str, question: str, conversation_history: list
 
     if prompt is None:
         yield ("sources", [])
-        yield ("token", "No resumes have been uploaded yet. Upload some resumes first, then ask me anything about your candidates!")
+        yield (
+            "token",
+            "No resumes have been uploaded yet. Upload some resumes first, then ask me anything about your candidates!",
+        )
         yield ("done", None)
         return
 
@@ -231,12 +326,7 @@ def query_resumes_stream(user_id: str, question: str, conversation_history: list
     yield ("sources", sources)
 
     # Stream tokens from LLM
-    for chunk in call_llm_stream(
-        prompt,
-        system_prompt=RAG_SYSTEM_PROMPT,
-        think=think,
-        max_tokens=1024
-    ):
+    for chunk in call_llm_stream(prompt, system_prompt=RAG_SYSTEM_PROMPT, think=think, max_tokens=1024):
         yield ("token", chunk)
 
     yield ("done", None)

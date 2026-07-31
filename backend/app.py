@@ -4,6 +4,7 @@ HireMinds AI — Flask API Application.
 All routes follow the {success, data, error} response format.
 Every route except /api/health is protected by @require_auth.
 """
+
 import os
 import uuid
 import logging
@@ -11,7 +12,8 @@ import time
 from datetime import datetime
 
 from dotenv import load_dotenv
-load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
+
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 from flask import Flask, request, jsonify, g, Response
 from flask_cors import CORS
@@ -27,17 +29,22 @@ from services.rag_engine import delete_candidate_chunks, query_resumes, query_re
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app, origins=[
-    "http://localhost:5173",    # Vite dev server
-    "http://localhost:80",      # Docker Nginx
-    "http://localhost",         # Docker Nginx (no port)
-], supports_credentials=True)
+CORS(
+    app,
+    origins=[
+        "http://localhost:5173",  # Vite dev server
+        "http://localhost:80",  # Docker Nginx
+        "http://localhost",  # Docker Nginx (no port)
+    ],
+    supports_credentials=True,
+)
 
 # Ensure upload directory exists
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
 # ─── Request Lifecycle Hooks ────────────────────────────────────────────────
+
 
 @app.before_request
 def _before_request():
@@ -49,10 +56,10 @@ def _before_request():
 @app.after_request
 def _after_request(response):
     """Log request completion with timing."""
-    if hasattr(g, 'request_start'):
+    if hasattr(g, "request_start"):
         duration_ms = (time.monotonic() - g.request_start) * 1000
         # Only log API routes, skip static/health noise
-        if request.path.startswith('/api') and request.path != '/api/health':
+        if request.path.startswith("/api") and request.path != "/api/health":
             logger.info(
                 f"[{g.get('request_id', '?')}] "
                 f"{request.method} {request.path} → {response.status_code} "
@@ -62,6 +69,7 @@ def _after_request(response):
 
 
 # ─── Global Error Handlers ──────────────────────────────────────────────────
+
 
 @app.errorhandler(400)
 def bad_request(e):
@@ -86,6 +94,7 @@ def internal_error(e):
 
 # ─── Helpers ────────────────────────────────────────────────────────────────
 
+
 def _allowed_file(filename):
     """Check if file extension is in the whitelist."""
     return os.path.splitext(filename)[1].lower() in ALLOWED_EXTENSIONS
@@ -93,25 +102,24 @@ def _allowed_file(filename):
 
 # ─── HEALTH CHECK ────────────────────────────────────────────────────────────
 
+
 @app.route("/api/health", methods=["GET"])
 def health_check():
-    return jsonify({
-        "success": True,
-        "data": {"status": "healthy", "service": "HireMinds AI"}
-    })
+    return jsonify({"success": True, "data": {"status": "healthy", "service": "HireMinds AI"}})
 
 
 # ─── UPLOAD RESUMES ──────────────────────────────────────────────────────────
+
 
 @app.route("/api/upload", methods=["POST"])
 @require_auth
 def upload_resume():
     user_id = g.user_id
 
-    if 'files' not in request.files:
+    if "files" not in request.files:
         return jsonify({"success": False, "error": "No files provided"}), 400
 
-    files = request.files.getlist('files')
+    files = request.files.getlist("files")
     if not files:
         return jsonify({"success": False, "error": "No files selected"}), 400
 
@@ -127,10 +135,7 @@ def upload_resume():
             continue
 
         if not _allowed_file(file.filename):
-            errors.append({
-                "filename": file.filename,
-                "error": "Unsupported file type. Use PDF, DOCX, or TXT."
-            })
+            errors.append({"filename": file.filename, "error": "Unsupported file type. Use PDF, DOCX, or TXT."})
             continue
 
         # Check file size
@@ -138,10 +143,7 @@ def upload_resume():
         size = file.tell()
         file.seek(0)
         if size > MAX_FILE_SIZE:
-            errors.append({
-                "filename": file.filename,
-                "error": f"File exceeds {MAX_FILE_SIZE // (1024*1024)}MB limit"
-            })
+            errors.append({"filename": file.filename, "error": f"File exceeds {MAX_FILE_SIZE // (1024*1024)}MB limit"})
             continue
 
         file_path = None
@@ -157,34 +159,38 @@ def upload_resume():
 
             # Save to Supabase
             candidate_id = str(uuid.uuid4())
-            sb.table("candidates").insert({
-                "id": candidate_id,
-                "user_id": user_id,
-                "name": parsed.get("name", "Unknown"),
-                "email": parsed.get("email"),
-                "phone": parsed.get("phone"),
-                "skills": parsed.get("skills", []),
-                "experience_years": parsed.get("experience_years", 0),
-                "education": parsed.get("education"),
-                "certifications": parsed.get("certifications", []),
-                "summary": parsed.get("summary"),
-                "raw_text": parsed.get("raw_text"),
-                "filename": file.filename,
-                "file_path": file_path,
-                "language": parsed.get("language", "en")
-            }).execute()
+            sb.table("candidates").insert(
+                {
+                    "id": candidate_id,
+                    "user_id": user_id,
+                    "name": parsed.get("name", "Unknown"),
+                    "email": parsed.get("email"),
+                    "phone": parsed.get("phone"),
+                    "skills": parsed.get("skills", []),
+                    "experience_years": parsed.get("experience_years", 0),
+                    "education": parsed.get("education"),
+                    "certifications": parsed.get("certifications", []),
+                    "summary": parsed.get("summary"),
+                    "raw_text": parsed.get("raw_text"),
+                    "filename": file.filename,
+                    "file_path": file_path,
+                    "language": parsed.get("language", "en"),
+                }
+            ).execute()
 
-            results.append({
-                "candidate_id": candidate_id,
-                "name": parsed.get("name"),
-                "email": parsed.get("email"),
-                "skills": parsed.get("skills", []),
-                "experience_years": parsed.get("experience_years", 0),
-                "education": parsed.get("education"),
-                "certifications": parsed.get("certifications", []),
-                "summary": parsed.get("summary"),
-                "filename": file.filename
-            })
+            results.append(
+                {
+                    "candidate_id": candidate_id,
+                    "name": parsed.get("name"),
+                    "email": parsed.get("email"),
+                    "skills": parsed.get("skills", []),
+                    "experience_years": parsed.get("experience_years", 0),
+                    "education": parsed.get("education"),
+                    "certifications": parsed.get("certifications", []),
+                    "summary": parsed.get("summary"),
+                    "filename": file.filename,
+                }
+            )
 
         except Exception as e:
             logger.error(f"Failed to process {file.filename}: {e}", exc_info=True)
@@ -196,18 +202,16 @@ def upload_resume():
                 except OSError:
                     pass
 
-    return jsonify({
-        "success": True,
-        "data": {
-            "processed": results,
-            "errors": errors,
-            "total": len(results),
-            "failed": len(errors)
+    return jsonify(
+        {
+            "success": True,
+            "data": {"processed": results, "errors": errors, "total": len(results), "failed": len(errors)},
         }
-    })
+    )
 
 
 # ─── CANDIDATES ──────────────────────────────────────────────────────────────
+
 
 @app.route("/api/candidates", methods=["GET"])
 @require_auth
@@ -228,7 +232,9 @@ def list_candidates():
     # Exclude raw_text from list view for performance
     query = (
         sb.table("candidates")
-        .select("id, user_id, name, email, phone, skills, experience_years, education, certifications, summary, filename, file_path, language, created_at")
+        .select(
+            "id, user_id, name, email, phone, skills, experience_years, education, certifications, summary, filename, file_path, language, created_at"
+        )
         .eq("user_id", user_id)
         .order(sort, desc=descending)
     )
@@ -254,12 +260,7 @@ def get_candidate(candidate_id):
     sb = get_supabase()
 
     candidate = (
-        sb.table("candidates")
-        .select("*")
-        .eq("id", candidate_id)
-        .eq("user_id", user_id)
-        .maybe_single()
-        .execute().data
+        sb.table("candidates").select("*").eq("id", candidate_id).eq("user_id", user_id).maybe_single().execute().data
     )
 
     if not candidate:
@@ -280,7 +281,8 @@ def delete_candidate(candidate_id):
         .eq("id", candidate_id)
         .eq("user_id", user_id)
         .maybe_single()
-        .execute().data
+        .execute()
+        .data
     )
 
     if not candidate:
@@ -304,6 +306,7 @@ def delete_candidate(candidate_id):
 
 
 # ─── JOB MATCHING ────────────────────────────────────────────────────────────
+
 
 @app.route("/api/match", methods=["POST"])
 @require_auth
@@ -336,14 +339,7 @@ def get_rankings(job_id):
     sb = get_supabase()
 
     # Verify job belongs to user
-    job = (
-        sb.table("jobs")
-        .select("*")
-        .eq("id", job_id)
-        .eq("user_id", user_id)
-        .maybe_single()
-        .execute().data
-    )
+    job = sb.table("jobs").select("*").eq("id", job_id).eq("user_id", user_id).maybe_single().execute().data
     if not job:
         return jsonify({"success": False, "error": "Job not found"}), 404
 
@@ -360,23 +356,26 @@ def get_rankings(job_id):
             "education_score": s["education_score"],
             "certification_score": s["certification_score"],
             "explanation": s["explanation"],
-            "badge": s["badge"]
+            "badge": s["badge"],
         }
         for s in rankings
     ]
 
-    return jsonify({
-        "success": True,
-        "data": {
-            "job_id": job_id,
-            "title": job["title"],
-            "requirements": job.get("requirements") or {},
-            "rankings": formatted
+    return jsonify(
+        {
+            "success": True,
+            "data": {
+                "job_id": job_id,
+                "title": job["title"],
+                "requirements": job.get("requirements") or {},
+                "rankings": formatted,
+            },
         }
-    })
+    )
 
 
 # ─── RAG CHAT ────────────────────────────────────────────────────────────────
+
 
 @app.route("/api/ask", methods=["POST"])
 @require_auth
@@ -398,11 +397,7 @@ def ask_question():
     if not conversation_id:
         conversation_id = str(uuid.uuid4())
         title = question[:50] + "..." if len(question) > 50 else question
-        sb.table("conversations").insert({
-            "id": conversation_id,
-            "user_id": user_id,
-            "title": title
-        }).execute()
+        sb.table("conversations").insert({"id": conversation_id, "user_id": user_id, "title": title}).execute()
     else:
         conv = (
             sb.table("conversations")
@@ -410,7 +405,8 @@ def ask_question():
             .eq("id", conversation_id)
             .eq("user_id", user_id)
             .maybe_single()
-            .execute().data
+            .execute()
+            .data
         )
         if not conv:
             return jsonify({"success": False, "error": "Conversation not found"}), 404
@@ -421,43 +417,41 @@ def ask_question():
         .select("role, content")
         .eq("conversation_id", conversation_id)
         .order("created_at")
-        .execute().data
+        .execute()
+        .data
     )
     conversation_history = [{"role": h["role"], "content": h["content"]} for h in history_rows]
 
     # Save user message
-    sb.table("messages").insert({
-        "id": str(uuid.uuid4()),
-        "conversation_id": conversation_id,
-        "role": "user",
-        "content": question
-    }).execute()
+    sb.table("messages").insert(
+        {"id": str(uuid.uuid4()), "conversation_id": conversation_id, "role": "user", "content": question}
+    ).execute()
 
     try:
         result = query_resumes(user_id, question, conversation_history)
 
         # Save assistant message
-        sb.table("messages").insert({
-            "id": str(uuid.uuid4()),
-            "conversation_id": conversation_id,
-            "role": "assistant",
-            "content": result["answer"],
-            "sources": result["sources"]
-        }).execute()
+        sb.table("messages").insert(
+            {
+                "id": str(uuid.uuid4()),
+                "conversation_id": conversation_id,
+                "role": "assistant",
+                "content": result["answer"],
+                "sources": result["sources"],
+            }
+        ).execute()
 
         # Touch conversation updated_at
-        sb.table("conversations").update({
-            "updated_at": datetime.utcnow().isoformat()
-        }).eq("id", conversation_id).execute()
+        sb.table("conversations").update({"updated_at": datetime.utcnow().isoformat()}).eq(
+            "id", conversation_id
+        ).execute()
 
-        return jsonify({
-            "success": True,
-            "data": {
-                "answer": result["answer"],
-                "sources": result["sources"],
-                "conversation_id": conversation_id
+        return jsonify(
+            {
+                "success": True,
+                "data": {"answer": result["answer"], "sources": result["sources"], "conversation_id": conversation_id},
             }
-        })
+        )
 
     except Exception as e:
         logger.error(f"RAG query failed: {e}", exc_info=True)
@@ -487,11 +481,7 @@ def ask_question_stream():
     if not conversation_id:
         conversation_id = str(uuid.uuid4())
         title = question[:50] + "..." if len(question) > 50 else question
-        sb.table("conversations").insert({
-            "id": conversation_id,
-            "user_id": user_id,
-            "title": title
-        }).execute()
+        sb.table("conversations").insert({"id": conversation_id, "user_id": user_id, "title": title}).execute()
     else:
         conv = (
             sb.table("conversations")
@@ -499,7 +489,8 @@ def ask_question_stream():
             .eq("id", conversation_id)
             .eq("user_id", user_id)
             .maybe_single()
-            .execute().data
+            .execute()
+            .data
         )
         if not conv:
             return jsonify({"success": False, "error": "Conversation not found"}), 404
@@ -510,26 +501,22 @@ def ask_question_stream():
         .select("role, content")
         .eq("conversation_id", conversation_id)
         .order("created_at")
-        .execute().data
+        .execute()
+        .data
     )
     conversation_history = [{"role": h["role"], "content": h["content"]} for h in history_rows]
 
     # Save user message
-    sb.table("messages").insert({
-        "id": str(uuid.uuid4()),
-        "conversation_id": conversation_id,
-        "role": "user",
-        "content": question
-    }).execute()
+    sb.table("messages").insert(
+        {"id": str(uuid.uuid4()), "conversation_id": conversation_id, "role": "user", "content": question}
+    ).execute()
 
     def generate():
         full_answer = ""
         sources = []
 
         try:
-            for chunk_type, chunk_data in query_resumes_stream(
-                user_id, question, conversation_history, think=think
-            ):
+            for chunk_type, chunk_data in query_resumes_stream(user_id, question, conversation_history, think=think):
                 if chunk_type == "sources":
                     sources = chunk_data
                     yield f"data: {json_lib.dumps({'type': 'sources', 'sources': chunk_data, 'conversation_id': conversation_id})}\n\n"
@@ -540,16 +527,18 @@ def ask_question_stream():
 
                 elif chunk_type == "done":
                     # Save complete assistant message
-                    sb.table("messages").insert({
-                        "id": str(uuid.uuid4()),
-                        "conversation_id": conversation_id,
-                        "role": "assistant",
-                        "content": full_answer,
-                        "sources": sources
-                    }).execute()
-                    sb.table("conversations").update({
-                        "updated_at": datetime.utcnow().isoformat()
-                    }).eq("id", conversation_id).execute()
+                    sb.table("messages").insert(
+                        {
+                            "id": str(uuid.uuid4()),
+                            "conversation_id": conversation_id,
+                            "role": "assistant",
+                            "content": full_answer,
+                            "sources": sources,
+                        }
+                    ).execute()
+                    sb.table("conversations").update({"updated_at": datetime.utcnow().isoformat()}).eq(
+                        "id", conversation_id
+                    ).execute()
 
                     yield f"data: {json_lib.dumps({'type': 'done', 'conversation_id': conversation_id})}\n\n"
 
@@ -559,12 +548,12 @@ def ask_question_stream():
 
     return Response(
         generate(),
-        mimetype='text/event-stream',
+        mimetype="text/event-stream",
         headers={
-            'Cache-Control': 'no-cache',
-            'X-Accel-Buffering': 'no',
-            'Connection': 'keep-alive',
-        }
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
     )
 
 
@@ -574,11 +563,7 @@ def list_conversations():
     user_id = g.user_id
     sb = get_supabase()
     conversations = (
-        sb.table("conversations")
-        .select("*")
-        .eq("user_id", user_id)
-        .order("updated_at", desc=True)
-        .execute().data
+        sb.table("conversations").select("*").eq("user_id", user_id).order("updated_at", desc=True).execute().data
     )
     return jsonify({"success": True, "data": conversations})
 
@@ -595,30 +580,21 @@ def get_conversation(conversation_id):
         .eq("id", conversation_id)
         .eq("user_id", user_id)
         .maybe_single()
-        .execute().data
+        .execute()
+        .data
     )
     if not conv:
         return jsonify({"success": False, "error": "Conversation not found"}), 404
 
     messages = (
-        sb.table("messages")
-        .select("*")
-        .eq("conversation_id", conversation_id)
-        .order("created_at")
-        .execute().data
+        sb.table("messages").select("*").eq("conversation_id", conversation_id).order("created_at").execute().data
     )
 
     for msg in messages:
         if msg.get("sources") is None:
             msg["sources"] = []
 
-    return jsonify({
-        "success": True,
-        "data": {
-            "conversation": conv,
-            "messages": messages
-        }
-    })
+    return jsonify({"success": True, "data": {"conversation": conv, "messages": messages}})
 
 
 @app.route("/api/conversations/<conversation_id>", methods=["DELETE"])
@@ -633,7 +609,8 @@ def delete_conversation(conversation_id):
         .eq("id", conversation_id)
         .eq("user_id", user_id)
         .maybe_single()
-        .execute().data
+        .execute()
+        .data
     )
     if not conv:
         return jsonify({"success": False, "error": "Conversation not found"}), 404
@@ -645,6 +622,7 @@ def delete_conversation(conversation_id):
 
 
 # ─── DASHBOARD STATS ─────────────────────────────────────────────────────────
+
 
 @app.route("/api/stats", methods=["GET"])
 @require_auth
@@ -660,28 +638,14 @@ def get_stats():
 
     try:
         # Core counts
-        candidates_resp = (
-            sb.table("candidates")
-            .select("id", count="exact")
-            .eq("user_id", user_id)
-            .execute()
-        )
+        candidates_resp = sb.table("candidates").select("id", count="exact").eq("user_id", user_id).execute()
         total_resumes = len(candidates_resp.data)
 
-        jobs_resp = (
-            sb.table("jobs")
-            .select("id", count="exact")
-            .eq("user_id", user_id)
-            .execute()
-        )
+        jobs_resp = sb.table("jobs").select("id", count="exact").eq("user_id", user_id).execute()
         jobs_matched = len(jobs_resp.data)
 
         # Score aggregations (single query for strong_matches + scored_candidates)
-        scores_resp = (
-            sb.table("scores")
-            .select("id, candidate_id, total_score")
-            .execute()
-        )
+        scores_resp = sb.table("scores").select("id, candidate_id, total_score").execute()
         all_scores = scores_resp.data or []
         strong_matches = sum(1 for s in all_scores if s.get("total_score", 0) >= 80)
         scored_candidates = len(set(s["candidate_id"] for s in all_scores)) if all_scores else 0
@@ -700,7 +664,8 @@ def get_stats():
             .eq("user_id", user_id)
             .order("created_at", desc=True)
             .limit(5)
-            .execute().data
+            .execute()
+            .data
         )
 
         recent_jobs = (
@@ -709,7 +674,8 @@ def get_stats():
             .eq("user_id", user_id)
             .order("created_at", desc=True)
             .limit(5)
-            .execute().data
+            .execute()
+            .data
         )
 
         # Top candidates via RPC
@@ -718,17 +684,11 @@ def get_stats():
         # Build activity feed
         activity = []
         for c in recent_candidates:
-            activity.append({
-                "type": "upload",
-                "description": f"Uploaded resume: {c['name']}",
-                "timestamp": c["created_at"]
-            })
+            activity.append(
+                {"type": "upload", "description": f"Uploaded resume: {c['name']}", "timestamp": c["created_at"]}
+            )
         for j in recent_jobs:
-            activity.append({
-                "type": "match",
-                "description": f"Job match: {j['title']}",
-                "timestamp": j["created_at"]
-            })
+            activity.append({"type": "match", "description": f"Job match: {j['title']}", "timestamp": j["created_at"]})
         activity.sort(key=lambda x: x["timestamp"] or "", reverse=True)
 
         top = [
@@ -736,24 +696,26 @@ def get_stats():
                 "id": tc["id"],
                 "name": tc["name"],
                 "skills": tc.get("skills") or [],
-                "avg_score": round(tc["avg_score"], 1) if tc.get("avg_score") else 0
+                "avg_score": round(tc["avg_score"], 1) if tc.get("avg_score") else 0,
             }
             for tc in top_candidates_raw
         ]
 
-        return jsonify({
-            "success": True,
-            "data": {
-                "total_resumes": total_resumes,
-                "jobs_matched": jobs_matched,
-                "strong_matches": strong_matches,
-                "scored_candidates": scored_candidates,
-                "avg_match_score": round(avg_score, 1) if avg_score else 0,
-                "total_qas": total_qas,
-                "recent_activity": activity[:10],
-                "top_candidates": top
+        return jsonify(
+            {
+                "success": True,
+                "data": {
+                    "total_resumes": total_resumes,
+                    "jobs_matched": jobs_matched,
+                    "strong_matches": strong_matches,
+                    "scored_candidates": scored_candidates,
+                    "avg_match_score": round(avg_score, 1) if avg_score else 0,
+                    "total_qas": total_qas,
+                    "recent_activity": activity[:10],
+                    "top_candidates": top,
+                },
             }
-        })
+        )
 
     except Exception as e:
         logger.error(f"Failed to load stats: {e}", exc_info=True)

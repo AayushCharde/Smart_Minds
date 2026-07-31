@@ -4,6 +4,7 @@ HireMinds AI — Application Configuration.
 All settings are driven by environment variables with sensible defaults.
 Validates required config at import time so the app fails fast on misconfiguration.
 """
+
 import os
 import sys
 import logging
@@ -11,10 +12,7 @@ import logging
 # ─── Logging Setup ──────────────────────────────────────────────────────────
 # Structured logging with correlation-friendly format for production debugging.
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
-LOG_FORMAT = os.getenv(
-    "LOG_FORMAT",
-    "%(asctime)s | %(levelname)-8s | %(name)-20s | %(message)s"
-)
+LOG_FORMAT = os.getenv("LOG_FORMAT", "%(asctime)s | %(levelname)-8s | %(name)-20s | %(message)s")
 
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
@@ -47,13 +45,10 @@ LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "180.0"))
 
 # ─── Clerk Authentication ────────────────────────────────────────────────────
 CLERK_SECRET_KEY = os.getenv("CLERK_SECRET_KEY")
-CLERK_JWKS_URL = os.getenv(
-    "CLERK_JWKS_URL",
-    "https://robust-collie-48.clerk.accounts.dev/.well-known/jwks.json"
-)
+CLERK_JWKS_URL = os.getenv("CLERK_JWKS_URL", "https://robust-collie-48.clerk.accounts.dev/.well-known/jwks.json")
 
 # ─── Paths ───────────────────────────────────────────────────────────────────
-UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), '..', 'data', 'resumes')
+UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), "..", "data", "resumes")
 
 # ─── Supabase ────────────────────────────────────────────────────────────────
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -66,7 +61,7 @@ RAG_MAX_PROMPT_CHARS = int(os.getenv("RAG_MAX_PROMPT_CHARS", "16000"))
 # ─── Upload Limits ──────────────────────────────────────────────────────────
 MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", str(10 * 1024 * 1024)))  # 10MB
 MAX_BATCH_FILES = int(os.getenv("MAX_BATCH_FILES", "50"))
-ALLOWED_EXTENSIONS = frozenset({'.pdf', '.docx', '.txt'})
+ALLOWED_EXTENSIONS = frozenset({".pdf", ".docx", ".txt"})
 
 
 # ─── Startup Validation ────────────────────────────────────────────────────
@@ -99,10 +94,7 @@ def _validate_config():
     if errors:
         for e in errors:
             _logger.error(f"✗ {e}")
-        _logger.error(
-            "Missing required environment variables. "
-            "Copy .env.example to .env and fill in your values."
-        )
+        _logger.error("Missing required environment variables. " "Copy .env.example to .env and fill in your values.")
         sys.exit(1)
 
     _logger.info(f"✓ Config loaded — model={LLM_MODEL}, endpoint={LLM_BASE_URL}")

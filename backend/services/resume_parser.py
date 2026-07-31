@@ -5,6 +5,7 @@ No LLM dependency — instant results, zero external API calls.
 Extracts: name, email, phone, skills (75+ tech terms), experience years,
 education, certifications. Full raw_text is preserved for RAG search.
 """
+
 import os
 import re
 import logging
@@ -12,51 +13,127 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Pre-compiled regex patterns for extraction
-_EMAIL_RE = re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
-_PHONE_RE = re.compile(r'[\+]?[\d\s\-\(\)]{7,15}')
-_PHONE_ONLY_RE = re.compile(r'^[\+\d\s\-\(\)]+$')
+_EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
+_PHONE_RE = re.compile(r"[\+]?[\d\s\-\(\)]{7,15}")
+_PHONE_ONLY_RE = re.compile(r"^[\+\d\s\-\(\)]+$")
 
 _EXP_PATTERNS = [
-    re.compile(r'(\d+)\+?\s*(?:years?|yrs?)\s+(?:of\s+)?(?:experience|exp)', re.IGNORECASE),
-    re.compile(r'(?:experience|exp)\s*(?:of\s+)?(\d+)\+?\s*(?:years?|yrs?)', re.IGNORECASE),
-    re.compile(r'(\d+)\+?\s*(?:years?|yrs?)\s+(?:in|of)', re.IGNORECASE),
+    re.compile(r"(\d+)\+?\s*(?:years?|yrs?)\s+(?:of\s+)?(?:experience|exp)", re.IGNORECASE),
+    re.compile(r"(?:experience|exp)\s*(?:of\s+)?(\d+)\+?\s*(?:years?|yrs?)", re.IGNORECASE),
+    re.compile(r"(\d+)\+?\s*(?:years?|yrs?)\s+(?:in|of)", re.IGNORECASE),
 ]
-_DATE_RANGE_RE = re.compile(r'20(\d{2})\s*[-\u2013\u2014to]+\s*(?:20(\d{2})|[Pp]resent|[Cc]urrent)')
+_DATE_RANGE_RE = re.compile(r"20(\d{2})\s*[-\u2013\u2014to]+\s*(?:20(\d{2})|[Pp]resent|[Cc]urrent)")
 
 _EDU_RE = re.compile(
-    r'(\b(?:B\.?Tech|B\.?Sc|B\.?A|B\.?E|B\.?Com|M\.?Tech|M\.?Sc|M\.?A|M\.?BA|M\.?Com|Ph\.?D|MBA|Bachelor|Master|Doctor)\b[^\n]{0,100})',
-    re.IGNORECASE
+    r"(\b(?:B\.?Tech|B\.?Sc|B\.?A|B\.?E|B\.?Com|M\.?Tech|M\.?Sc|M\.?A|M\.?BA|M\.?Com|Ph\.?D|MBA|Bachelor|Master|Doctor)\b[^\n]{0,100})",
+    re.IGNORECASE,
 )
-_EDU_SECTION_RE = re.compile(r'[Ee]ducation[:\s]*\n([^\n]+)')
+_EDU_SECTION_RE = re.compile(r"[Ee]ducation[:\s]*\n([^\n]+)")
 
 # Known skills list — lowercase versions pre-computed for O(1) matching
 _KNOWN_SKILLS = [
-    'Python', 'Java', 'JavaScript', 'TypeScript', 'C++', 'C#', 'Go', 'Rust', 'Ruby', 'PHP', 'Swift', 'Kotlin',
-    'React', 'Angular', 'Vue', 'Next.js', 'Node.js', 'Express', 'Django', 'Flask', 'Spring Boot', 'FastAPI',
-    'AWS', 'Azure', 'GCP', 'Docker', 'Kubernetes', 'Terraform', 'Jenkins', 'CI/CD',
-    'PostgreSQL', 'MySQL', 'MongoDB', 'Redis', 'Elasticsearch', 'SQL', 'NoSQL',
-    'Git', 'Linux', 'REST API', 'GraphQL', 'Microservices', 'Agile', 'Scrum',
-    'Machine Learning', 'Deep Learning', 'TensorFlow', 'PyTorch', 'NLP',
-    'HTML', 'CSS', 'TailwindCSS', 'Bootstrap',
-    'Power BI', 'Tableau', 'Excel', 'Pandas', 'NumPy', 'Spark',
-    '.NET', 'Spring', 'Hibernate', 'Maven', 'Gradle',
-    'Redux', 'Prisma', 'Nginx', 'Postman', 'Cypress', 'Jest', 'Selenium',
-    'Firebase', 'Supabase', 'Vercel', 'Heroku',
+    "Python",
+    "Java",
+    "JavaScript",
+    "TypeScript",
+    "C++",
+    "C#",
+    "Go",
+    "Rust",
+    "Ruby",
+    "PHP",
+    "Swift",
+    "Kotlin",
+    "React",
+    "Angular",
+    "Vue",
+    "Next.js",
+    "Node.js",
+    "Express",
+    "Django",
+    "Flask",
+    "Spring Boot",
+    "FastAPI",
+    "AWS",
+    "Azure",
+    "GCP",
+    "Docker",
+    "Kubernetes",
+    "Terraform",
+    "Jenkins",
+    "CI/CD",
+    "PostgreSQL",
+    "MySQL",
+    "MongoDB",
+    "Redis",
+    "Elasticsearch",
+    "SQL",
+    "NoSQL",
+    "Git",
+    "Linux",
+    "REST API",
+    "GraphQL",
+    "Microservices",
+    "Agile",
+    "Scrum",
+    "Machine Learning",
+    "Deep Learning",
+    "TensorFlow",
+    "PyTorch",
+    "NLP",
+    "HTML",
+    "CSS",
+    "TailwindCSS",
+    "Bootstrap",
+    "Power BI",
+    "Tableau",
+    "Excel",
+    "Pandas",
+    "NumPy",
+    "Spark",
+    ".NET",
+    "Spring",
+    "Hibernate",
+    "Maven",
+    "Gradle",
+    "Redux",
+    "Prisma",
+    "Nginx",
+    "Postman",
+    "Cypress",
+    "Jest",
+    "Selenium",
+    "Firebase",
+    "Supabase",
+    "Vercel",
+    "Heroku",
 ]
 _SKILLS_LOOKUP = [(skill, skill.lower()) for skill in _KNOWN_SKILLS]
 
-_CERT_KEYWORDS = frozenset([
-    'certified', 'certification', 'certificate', 'aws ', 'pmp',
-    'scrum master', 'cissp', 'ccna', 'oracle', 'comptia', 'itil'
-])
+_CERT_KEYWORDS = frozenset(
+    [
+        "certified",
+        "certification",
+        "certificate",
+        "aws ",
+        "pmp",
+        "scrum master",
+        "cissp",
+        "ccna",
+        "oracle",
+        "comptia",
+        "itil",
+    ]
+)
 
 
 def extract_text(file_path: str) -> str:
     """Extract raw text from PDF, DOCX, or TXT file."""
     ext = os.path.splitext(file_path)[1].lower()
 
-    if ext == '.pdf':
+    if ext == ".pdf":
         from pypdf import PdfReader
+
         try:
             reader = PdfReader(file_path)
             pages = []
@@ -69,8 +146,9 @@ def extract_text(file_path: str) -> str:
             logger.error(f"PDF extraction failed for {file_path}: {e}")
             raise ValueError(f"Failed to read PDF: {e}") from e
 
-    elif ext == '.docx':
+    elif ext == ".docx":
         from docx import Document
+
         try:
             doc = Document(file_path)
             return "\n".join(para.text for para in doc.paragraphs).strip()
@@ -78,9 +156,9 @@ def extract_text(file_path: str) -> str:
             logger.error(f"DOCX extraction failed for {file_path}: {e}")
             raise ValueError(f"Failed to read DOCX: {e}") from e
 
-    elif ext == '.txt':
+    elif ext == ".txt":
         try:
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 return f.read().strip()
         except Exception as e:
             logger.error(f"TXT extraction failed for {file_path}: {e}")
@@ -108,10 +186,10 @@ def _extract_phone(text: str):
 
 def _extract_name(text: str):
     """Extract candidate name from the first few lines of the resume."""
-    lines = text.strip().split('\n')
+    lines = text.strip().split("\n")
     for line in lines[:5]:
         line = line.strip()
-        if not line or '@' in line or 'http' in line.lower():
+        if not line or "@" in line or "http" in line.lower():
             continue
         if _PHONE_ONLY_RE.match(line):
             continue
@@ -166,7 +244,7 @@ def _extract_education(text: str):
 def _extract_certifications(text: str):
     """Extract certification lines from resume text."""
     certs = []
-    for line in text.split('\n'):
+    for line in text.split("\n"):
         stripped = line.strip()
         line_lower = stripped.lower()
         if any(kw in line_lower for kw in _CERT_KEYWORDS):
@@ -198,13 +276,10 @@ def parse_resume(file_path: str) -> dict:
     certifications = _extract_certifications(raw_text)
 
     # Brief summary from first lines
-    first_lines = ' '.join(raw_text[:300].split('\n')[:3]).strip()
+    first_lines = " ".join(raw_text[:300].split("\n")[:3]).strip()
     summary = first_lines[:200] if first_lines else name
 
-    logger.debug(
-        f"Parsed resume: {name}, {len(skills)} skills, "
-        f"{experience_years}yr exp, {len(raw_text)} chars"
-    )
+    logger.debug(f"Parsed resume: {name}, {len(skills)} skills, " f"{experience_years}yr exp, {len(raw_text)} chars")
 
     return {
         "name": name,

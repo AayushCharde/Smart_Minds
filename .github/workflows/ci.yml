@@ -1,0 +1,119 @@
+# ─── HireMinds AI — CI ────────────────────────────────────────────────────────
+# Runs on every push and PR to main:
+#   backend   → Python 3.11 (matches Dockerfile), deps install, syntax,
+#               black --check (line length 120, same as project hooks),
+#               app import smoke test with dummy env
+#   frontend  → Node 20 (matches Dockerfile), npm ci, vite production build
+#   guards    → repo rules from scripts/pre-commit-check.sh, applied tree-wide:
+#               no API keys, no hardcoded model names, no old endpoints,
+#               @require_auth on every route except /api/health
+#   docker    → both images build cleanly
+# ──────────────────────────────────────────────────────────────────────────────
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend (lint + import)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install black
+      - name: Python syntax check
+        run: python -m compileall -q .
+      - name: Black formatting check (line length 120)
+        run: black --check --line-length 120 .
+      - name: App import smoke test
+        env:
+          SUPABASE_URL: https://ci-dummy.supabase.co
+          SUPABASE_KEY: sb_secret_ci_dummy_key
+          LLM_API_KEY: gsk_ci_dummy
+          CLERK_SECRET_KEY: sk_test_ci_dummy
+        run: python -c "import app; print('app imports OK,', len(list(app.app.url_map.iter_rules())), 'routes registered')"
+
+  frontend:
+    name: Frontend (build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Production build
+        env:
+          VITE_CLERK_PUBLISHABLE_KEY: pk_test_ci-dummy-key
+        run: npm run build
+
+  guards:
+    name: Project rule guards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No API keys in source
+        run: |
+          LEAKED=$(grep -rnE '(sk-[a-zA-Z0-9]{20,}|pk_test_[a-zA-Z0-9]{20,}|sk_test_[a-zA-Z0-9]{20,}|gsk_[a-zA-Z0-9]{20,}|sb_secret_[a-zA-Z0-9]{20,})' \
+            --include='*.py' --include='*.js' --include='*.jsx' --include='*.json' --include='*.yml' --include='*.sql' \
+            --exclude-dir=node_modules --exclude-dir=.git . || true)
+          if [ -n "$LEAKED" ]; then echo "::error::API key found in source:"; echo "$LEAKED"; exit 1; fi
+          echo "clean"
+      - name: No hardcoded model names (use config.LLM_MODEL)
+        run: |
+          BAD=$(grep -rnE 'qwen-?(2\.5|2|1\.5|7b|72b|turbo)|gpt-[34]|claude-' \
+            --include='*.py' --include='*.js' --include='*.jsx' \
+            --exclude-dir=node_modules backend/ frontend/src/ || true)
+          if [ -n "$BAD" ]; then echo "::error::Hardcoded model name found — use config.LLM_MODEL:"; echo "$BAD"; exit 1; fi
+          echo "clean"
+      - name: No old DashScope/aliyuncs endpoints
+        run: |
+          OLD=$(grep -rniE 'dashscope|aliyuncs' \
+            --include='*.py' --include='*.js' --include='*.jsx' --include='*.txt' --include='*.json' \
+            --exclude-dir=node_modules backend/ frontend/src/ || true)
+          if [ -n "$OLD" ]; then echo "::error::Old endpoint reference found:"; echo "$OLD"; exit 1; fi
+          echo "clean"
+      - name: Every route has @require_auth (except /api/health)
+        run: |
+          UNPROTECTED=""
+          while IFS= read -r line; do
+            LINE_NUM="${line%%:*}"
+            ROUTE_PATH=$(echo "$line" | grep -oE '"/api/[^"]*"' || true)
+            [ "$ROUTE_PATH" = '"/api/health"' ] && continue
+            NEXT=$(sed -n "$((LINE_NUM+1)),$((LINE_NUM+2))p" backend/app.py)
+            if ! echo "$NEXT" | grep -q '@require_auth'; then
+              UNPROTECTED="$UNPROTECTED $ROUTE_PATH(line $LINE_NUM)"
+            fi
+          done < <(grep -n '@app.route' backend/app.py)
+          if [ -n "$UNPROTECTED" ]; then echo "::error::Routes missing @require_auth:$UNPROTECTED"; exit 1; fi
+          echo "all routes protected"
+
+  docker:
+    name: Docker images build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build -t ci-backend ./backend
+      - name: Build frontend image
+        run: docker build -t ci-frontend --build-arg VITE_CLERK_PUBLISHABLE_KEY=pk_test_ci-dummy-key ./frontend

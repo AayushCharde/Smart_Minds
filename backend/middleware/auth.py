@@ -15,6 +15,7 @@ JWKS Flow:
 - Auto-refresh if key lookup fails (handles Clerk key rotation)
 - Thread-safe via threading.Lock
 """
+
 import time
 import logging
 import threading
@@ -104,23 +105,18 @@ def _get_signing_key(token):
 
 def require_auth(f):
     """Decorator to protect Flask routes with Clerk JWT verification."""
+
     @wraps(f)
     def decorated(*args, **kwargs):
         auth_header = request.headers.get("Authorization", "")
 
         if not auth_header.startswith("Bearer "):
-            return jsonify({
-                "success": False,
-                "error": "Missing or invalid Authorization header"
-            }), 401
+            return jsonify({"success": False, "error": "Missing or invalid Authorization header"}), 401
 
         token = auth_header.split(" ", 1)[1]
 
         if not token or len(token) < 10:
-            return jsonify({
-                "success": False,
-                "error": "Invalid token format"
-            }), 401
+            return jsonify({"success": False, "error": "Invalid token format"}), 401
 
         try:
             signing_key = _get_signing_key(token)
@@ -133,31 +129,20 @@ def require_auth(f):
 
             user_id = payload.get("sub")
             if not user_id:
-                return jsonify({
-                    "success": False,
-                    "error": "Token missing user identifier"
-                }), 401
+                return jsonify({"success": False, "error": "Token missing user identifier"}), 401
 
             g.user_id = user_id
             g.session_id = payload.get("sid")
 
         except pyjwt.ExpiredSignatureError:
-            return jsonify({
-                "success": False,
-                "error": "Token has expired. Please sign in again."
-            }), 401
+            return jsonify({"success": False, "error": "Token has expired. Please sign in again."}), 401
         except pyjwt.InvalidTokenError as e:
             logger.warning(f"Invalid JWT: {e}")
-            return jsonify({
-                "success": False,
-                "error": "Invalid authentication token"
-            }), 401
+            return jsonify({"success": False, "error": "Invalid authentication token"}), 401
         except Exception as e:
             logger.error(f"Auth error: {e}", exc_info=True)
-            return jsonify({
-                "success": False,
-                "error": "Authentication failed"
-            }), 401
+            return jsonify({"success": False, "error": "Authentication failed"}), 401
 
         return f(*args, **kwargs)
+
     return decorated
