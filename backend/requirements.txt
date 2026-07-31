@@ -3,8 +3,8 @@ flask-cors==5.0.1
 openai==1.86.0
 pypdf==5.4.0
 python-docx==1.1.2
-PyJWT[crypto]==2.9.0
+PyJWT[crypto]==2.13.0
 requests==2.32.3
 python-dotenv==1.1.0
-supabase==2.13.0
+supabase==2.31.0
 gunicorn==23.0.0
