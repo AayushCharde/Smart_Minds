@@ -126,3 +126,4 @@ data/        → uploaded resumes on disk
 - `GET /api/conversations/:id` — conversation + messages
 - `DELETE /api/conversations/:id` — delete conversation + messages
 - `GET /api/stats` — dashboard analytics (uses RPC)
+- `GET /api/llm-usage` — live LLM provider quota (requests/day, tokens/min) read from the provider's `x-ratelimit-*` headers via a 1-token probe

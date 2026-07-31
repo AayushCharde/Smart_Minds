@@ -354,6 +354,7 @@ Every endpoint (except health check) requires a `Authorization: Bearer <jwt>` he
 | `GET` | `/api/conversations/:id` | Yes | Get conversation + messages |
 | `DELETE` | `/api/conversations/:id` | Yes | Delete conversation + messages |
 | `GET` | `/api/stats` | Yes | Dashboard analytics (via RPC) |
+| `GET` | `/api/llm-usage` | Yes | Live LLM free-tier quota (requests/day, tokens/min + reset timers) |
 
 ---
 

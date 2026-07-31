@@ -25,6 +25,7 @@ from middleware.auth import require_auth
 from services.resume_parser import parse_resume
 from services.matcher import match_candidates
 from services.rag_engine import delete_candidate_chunks, query_resumes, query_resumes_stream
+from services.llm_client import get_llm_quota
 
 logger = logging.getLogger(__name__)
 
@@ -610,6 +611,27 @@ def delete_conversation(conversation_id):
     sb.table("conversations").delete().eq("id", conversation_id).execute()
 
     return jsonify({"success": True, "data": {"message": "Conversation deleted"}})
+
+
+# ─── LLM USAGE / QUOTA ───────────────────────────────────────────────────────
+
+
+@app.route("/api/llm-usage", methods=["GET"])
+@require_auth
+def llm_usage():
+    """Live free-tier quota from the LLM provider's rate-limit headers.
+
+    Probes the provider with a minimal 1-token completion; Groq (and other
+    OpenAI-compatible providers) return requests/day and tokens/minute
+    limits, remaining counts, and reset timers on every response.
+    """
+    try:
+        quota = get_llm_quota()
+        quota["checked_at"] = datetime.utcnow().isoformat() + "Z"
+        return jsonify({"success": True, "data": quota})
+    except Exception as e:
+        logger.error(f"LLM quota probe failed: {e}", exc_info=True)
+        return jsonify({"success": False, "error": f"Could not reach LLM provider: {str(e)}"}), 502
 
 
 # ─── DASHBOARD STATS ─────────────────────────────────────────────────────────

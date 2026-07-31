@@ -13,6 +13,7 @@ const UploadPage = lazy(() => import('./components/Upload/UploadPage'));
 const CandidateDetail = lazy(() => import('./components/Upload/CandidateDetail'));
 const MatcherPage = lazy(() => import('./components/Matcher/MatcherPage'));
 const ChatPage = lazy(() => import('./components/Chat/ChatPage'));
+const SettingsPage = lazy(() => import('./components/Settings/SettingsPage'));
 
 // ─── Suspense fallback ──────────────────────────────────────────────
 function PageLoader() {
@@ -282,6 +283,7 @@ function AppRoutes() {
                         <Route path="/candidate/:id" element={<CandidateDetail />} />
                         <Route path="/match" element={<MatcherPage />} />
                         <Route path="/chat" element={<ChatPage />} />
+                        <Route path="/settings" element={<SettingsPage />} />
                       </Routes>
                     </Suspense>
                   </ErrorBoundary>

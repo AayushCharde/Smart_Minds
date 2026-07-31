@@ -21,6 +21,7 @@ const navItems = [
   { path: '/upload', label: 'Upload & Screen', icon: Upload },
   { path: '/match', label: 'Job Matcher', icon: Target },
   { path: '/chat', label: 'AI Chat', icon: MessageSquare },
+  { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export default function Sidebar() {

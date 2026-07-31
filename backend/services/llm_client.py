@@ -227,6 +227,109 @@ def call_llm_json(prompt: str, system_prompt: str = "", think: bool = False, max
             raise
 
 
+# ─── Provider quota / rate-limit inspection ──────────────────────────────────
+
+_RESET_PART_RE = re.compile(r"(\d+(?:\.\d+)?)(ms|h|m|s|d)")
+
+
+def _parse_reset(value: str):
+    """Parse provider reset durations like '2m59.56s', '7.66s', '1h3m' → seconds."""
+    if not value:
+        return None
+    total = 0.0
+    matched = False
+    for num, unit in _RESET_PART_RE.findall(value):
+        matched = True
+        total += float(num) * {"ms": 0.001, "s": 1, "m": 60, "h": 3600, "d": 86400}[unit]
+    return round(total, 1) if matched else None
+
+
+def _quota_from_headers(headers) -> dict:
+    """Build the quota payload from OpenAI-compatible x-ratelimit-* headers.
+
+    Groq's free tier exposes requests/day and tokens/minute on every
+    chat-completions response; any OpenAI-compatible provider that sends
+    these headers works the same way.
+    """
+
+    def _int(name):
+        v = headers.get(name)
+        try:
+            return int(float(v)) if v is not None else None
+        except ValueError:
+            return None
+
+    req_limit = _int("x-ratelimit-limit-requests")
+    req_remaining = _int("x-ratelimit-remaining-requests")
+    tok_limit = _int("x-ratelimit-limit-tokens")
+    tok_remaining = _int("x-ratelimit-remaining-tokens")
+
+    return {
+        "requests_per_day": {
+            "limit": req_limit,
+            "remaining": req_remaining,
+            "used": (req_limit - req_remaining) if req_limit is not None and req_remaining is not None else None,
+            "reset_seconds": _parse_reset(headers.get("x-ratelimit-reset-requests")),
+        },
+        "tokens_per_minute": {
+            "limit": tok_limit,
+            "remaining": tok_remaining,
+            "used": (tok_limit - tok_remaining) if tok_limit is not None and tok_remaining is not None else None,
+            "reset_seconds": _parse_reset(headers.get("x-ratelimit-reset-tokens")),
+        },
+    }
+
+
+def get_llm_quota() -> dict:
+    """Probe the LLM provider with a minimal 1-token completion and report
+    live free-tier quota from the response's rate-limit headers.
+
+    Costs a handful of tokens per call — negligible against the daily quota,
+    and the only way to get authoritative live numbers (Groq has no separate
+    usage API for free-tier keys).
+    """
+    from urllib.parse import urlparse
+
+    provider_host = urlparse(LLM_BASE_URL).hostname or LLM_BASE_URL
+
+    try:
+        raw = client.chat.completions.with_raw_response.create(
+            model=LLM_MODEL,
+            messages=[{"role": "user", "content": "ping"}],
+            max_tokens=1,
+            temperature=0,
+        )
+        headers = raw.headers
+        completion = raw.parse()
+        probe_tokens = completion.usage.total_tokens if completion.usage else None
+        quota = _quota_from_headers(headers)
+        quota.update(
+            {
+                "status": "ok",
+                "provider": provider_host,
+                "model": LLM_MODEL,
+                "probe_cost_tokens": probe_tokens,
+            }
+        )
+        return quota
+    except Exception as e:
+        # On 429 the provider still sends rate-limit headers — surface them
+        headers = getattr(getattr(e, "response", None), "headers", None)
+        if headers is not None:
+            quota = _quota_from_headers(headers)
+            quota.update(
+                {
+                    "status": "rate_limited",
+                    "provider": provider_host,
+                    "model": LLM_MODEL,
+                    "retry_after_seconds": _parse_reset(headers.get("retry-after"))
+                    or (int(headers["retry-after"]) if str(headers.get("retry-after", "")).isdigit() else None),
+                }
+            )
+            return quota
+        raise _classify_error(e) from e
+
+
 # ─── Backward-compatible aliases ─────────────────────────────────────────────
 call_qwen = call_llm
 call_qwen_json = call_llm_json
