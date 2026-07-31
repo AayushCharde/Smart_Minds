@@ -43,6 +43,12 @@ CORS(
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
+def _row(resp):
+    """Unwrap a maybe_single() response. supabase-py returns None (not an
+    empty response) when zero rows match, so .data would raise AttributeError."""
+    return resp.data if resp else None
+
+
 # ─── Request Lifecycle Hooks ────────────────────────────────────────────────
 
 
@@ -259,8 +265,8 @@ def get_candidate(candidate_id):
     user_id = g.user_id
     sb = get_supabase()
 
-    candidate = (
-        sb.table("candidates").select("*").eq("id", candidate_id).eq("user_id", user_id).maybe_single().execute().data
+    candidate = _row(
+        sb.table("candidates").select("*").eq("id", candidate_id).eq("user_id", user_id).maybe_single().execute()
     )
 
     if not candidate:
@@ -275,14 +281,13 @@ def delete_candidate(candidate_id):
     user_id = g.user_id
     sb = get_supabase()
 
-    candidate = (
+    candidate = _row(
         sb.table("candidates")
         .select("id, file_path")
         .eq("id", candidate_id)
         .eq("user_id", user_id)
         .maybe_single()
         .execute()
-        .data
     )
 
     if not candidate:
@@ -339,7 +344,7 @@ def get_rankings(job_id):
     sb = get_supabase()
 
     # Verify job belongs to user
-    job = sb.table("jobs").select("*").eq("id", job_id).eq("user_id", user_id).maybe_single().execute().data
+    job = _row(sb.table("jobs").select("*").eq("id", job_id).eq("user_id", user_id).maybe_single().execute())
     if not job:
         return jsonify({"success": False, "error": "Job not found"}), 404
 
@@ -399,14 +404,13 @@ def ask_question():
         title = question[:50] + "..." if len(question) > 50 else question
         sb.table("conversations").insert({"id": conversation_id, "user_id": user_id, "title": title}).execute()
     else:
-        conv = (
+        conv = _row(
             sb.table("conversations")
             .select("id")
             .eq("id", conversation_id)
             .eq("user_id", user_id)
             .maybe_single()
             .execute()
-            .data
         )
         if not conv:
             return jsonify({"success": False, "error": "Conversation not found"}), 404
@@ -483,14 +487,13 @@ def ask_question_stream():
         title = question[:50] + "..." if len(question) > 50 else question
         sb.table("conversations").insert({"id": conversation_id, "user_id": user_id, "title": title}).execute()
     else:
-        conv = (
+        conv = _row(
             sb.table("conversations")
             .select("id")
             .eq("id", conversation_id)
             .eq("user_id", user_id)
             .maybe_single()
             .execute()
-            .data
         )
         if not conv:
             return jsonify({"success": False, "error": "Conversation not found"}), 404
@@ -574,14 +577,8 @@ def get_conversation(conversation_id):
     user_id = g.user_id
     sb = get_supabase()
 
-    conv = (
-        sb.table("conversations")
-        .select("*")
-        .eq("id", conversation_id)
-        .eq("user_id", user_id)
-        .maybe_single()
-        .execute()
-        .data
+    conv = _row(
+        sb.table("conversations").select("*").eq("id", conversation_id).eq("user_id", user_id).maybe_single().execute()
     )
     if not conv:
         return jsonify({"success": False, "error": "Conversation not found"}), 404
@@ -603,14 +600,8 @@ def delete_conversation(conversation_id):
     user_id = g.user_id
     sb = get_supabase()
 
-    conv = (
-        sb.table("conversations")
-        .select("id")
-        .eq("id", conversation_id)
-        .eq("user_id", user_id)
-        .maybe_single()
-        .execute()
-        .data
+    conv = _row(
+        sb.table("conversations").select("id").eq("id", conversation_id).eq("user_id", user_id).maybe_single().execute()
     )
     if not conv:
         return jsonify({"success": False, "error": "Conversation not found"}), 404
@@ -644,9 +635,16 @@ def get_stats():
         jobs_resp = sb.table("jobs").select("id", count="exact").eq("user_id", user_id).execute()
         jobs_matched = len(jobs_resp.data)
 
-        # Score aggregations (single query for strong_matches + scored_candidates)
-        scores_resp = sb.table("scores").select("id, candidate_id, total_score").execute()
-        all_scores = scores_resp.data or []
+        # Score aggregations (single query for strong_matches + scored_candidates).
+        # scores has no user_id column — scope through the user's job ids.
+        user_job_ids = [j["id"] for j in jobs_resp.data]
+        if user_job_ids:
+            scores_resp = (
+                sb.table("scores").select("id, candidate_id, total_score").in_("job_id", user_job_ids).execute()
+            )
+            all_scores = scores_resp.data or []
+        else:
+            all_scores = []
         strong_matches = sum(1 for s in all_scores if s.get("total_score", 0) >= 80)
         scored_candidates = len(set(s["candidate_id"] for s in all_scores)) if all_scores else 0
 
