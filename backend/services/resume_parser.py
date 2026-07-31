@@ -14,7 +14,9 @@ logger = logging.getLogger(__name__)
 
 # Pre-compiled regex patterns for extraction
 _EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
-_PHONE_RE = re.compile(r"[\+]?[\d\s\-\(\)]{7,15}")
+# Must start and end on a digit; up to 21 chars total so formatted numbers
+# like "+1 (415) 555-0182" (17 chars) aren't truncated mid-number.
+_PHONE_RE = re.compile(r"\+?\(?\d[\d\s\-\(\)]{5,19}\d")
 _PHONE_ONLY_RE = re.compile(r"^[\+\d\s\-\(\)]+$")
 
 _EXP_PATTERNS = [
@@ -25,10 +27,10 @@ _EXP_PATTERNS = [
 _DATE_RANGE_RE = re.compile(r"20(\d{2})\s*[-\u2013\u2014to]+\s*(?:20(\d{2})|[Pp]resent|[Cc]urrent)")
 
 _EDU_RE = re.compile(
-    r"(\b(?:B\.?Tech|B\.?Sc|B\.?A|B\.?E|B\.?Com|M\.?Tech|M\.?Sc|M\.?A|M\.?BA|M\.?Com|Ph\.?D|MBA|Bachelor|Master|Doctor)\b[^\n]{0,100})",
+    r"(\b(?:B\.?Tech|B\.?Sc|B\.?A|B\.?E|B\.?Com|B\.S|M\.?Tech|M\.?Sc|M\.?A|M\.?BA|M\.?Com|M\.S|Ph\.?D|MBA|Bachelor|Master|Doctor)\b[^\n]{0,100})",
     re.IGNORECASE,
 )
-_EDU_SECTION_RE = re.compile(r"[Ee]ducation[:\s]*\n([^\n]+)")
+_EDU_SECTION_RE = re.compile(r"education[:\s]*\n\s*([^\n]+)", re.IGNORECASE)
 
 # Known skills list — lowercase versions pre-computed for O(1) matching
 _KNOWN_SKILLS = [
@@ -108,7 +110,25 @@ _KNOWN_SKILLS = [
     "Vercel",
     "Heroku",
 ]
-_SKILLS_LOOKUP = [(skill, skill.lower()) for skill in _KNOWN_SKILLS]
+
+
+def _compile_skill(skill: str) -> re.Pattern:
+    """Word-bounded, case-insensitive pattern. Custom boundaries instead of \\b
+    so skills containing +, #, . (C++, C#, .NET, Node.js) match correctly, and
+    substrings don't false-positive (Java != JavaScript, Go != Django)."""
+    return re.compile(r"(?<![a-z0-9+#])" + re.escape(skill.lower()) + r"(?![a-z0-9+#])", re.IGNORECASE)
+
+
+# Skills that are common English words — require capitalization as written on
+# resumes, so "willing to go", "swift delivery", "express interest" don't match.
+_AMBIGUOUS_SKILL_PATTERNS = {
+    "Go": re.compile(r"(?<![A-Za-z0-9+#])(?:Go|Golang)(?![a-z0-9+#])"),
+    "Swift": re.compile(r"(?<![A-Za-z0-9+#])Swift(?![a-z0-9+#])"),
+    "Express": re.compile(r"(?<![A-Za-z0-9+#])Express(?:\.js)?(?![a-z0-9+#])"),
+    "Spring": re.compile(r"(?<![A-Za-z0-9+#])Spring(?![a-z0-9+#])"),
+}
+
+_SKILL_PATTERNS = [(skill, _AMBIGUOUS_SKILL_PATTERNS.get(skill) or _compile_skill(skill)) for skill in _KNOWN_SKILLS]
 
 _CERT_KEYWORDS = frozenset(
     [
@@ -201,9 +221,8 @@ def _extract_name(text: str):
 
 
 def _extract_skills(text: str):
-    """Match known tech skills against resume text (case-insensitive)."""
-    text_lower = text.lower()
-    return [skill for skill, skill_lower in _SKILLS_LOOKUP if skill_lower in text_lower]
+    """Match known tech skills against resume text (word-bounded)."""
+    return [skill for skill, pattern in _SKILL_PATTERNS if pattern.search(text)]
 
 
 def _extract_experience_years(text: str):
@@ -241,15 +260,47 @@ def _extract_education(text: str):
     return None
 
 
+_SECTION_HEADER_RE = re.compile(r"^[A-Z][A-Z\s&/]{2,40}:?$")  # e.g. CERTIFICATIONS, WORK EXPERIENCE
+_CERT_HEADER_RE = re.compile(r"^certifications?\s*:?\s*$", re.IGNORECASE)
+
+
 def _extract_certifications(text: str):
-    """Extract certification lines from resume text."""
+    """Extract certification lines from resume text.
+
+    Prefers an explicit CERTIFICATIONS section (lines until the next section
+    header); falls back to a keyword scan that skips header lines.
+    """
+    lines = text.split("\n")
+
+    # Preferred: explicit CERTIFICATIONS section
+    for i, line in enumerate(lines):
+        if _CERT_HEADER_RE.match(line.strip()):
+            certs = []
+            for nxt in lines[i + 1 :]:
+                stripped = nxt.strip()
+                if not stripped:
+                    if certs:
+                        break  # blank line after content ends the section
+                    continue
+                if _SECTION_HEADER_RE.match(stripped):
+                    break  # next section begins
+                if 3 < len(stripped) < 150:
+                    certs.append(stripped.lstrip("-•* ").strip())
+                if len(certs) == 10:
+                    break
+            if certs:
+                return certs
+
+    # Fallback: keyword scan, skipping section-header lines
     certs = []
-    for line in text.split("\n"):
+    for line in lines:
         stripped = line.strip()
+        if _SECTION_HEADER_RE.match(stripped) or _CERT_HEADER_RE.match(stripped):
+            continue
         line_lower = stripped.lower()
         if any(kw in line_lower for kw in _CERT_KEYWORDS):
             if 10 < len(stripped) < 150:
-                certs.append(stripped)
+                certs.append(stripped.lstrip("-•* ").strip())
     return certs[:10]
 
 
