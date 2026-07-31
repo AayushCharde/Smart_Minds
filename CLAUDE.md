@@ -118,7 +118,7 @@ data/        → uploaded resumes on disk
 - `GET /api/candidates` — list candidates (supports `?sort=`, `?order=`, `?skill=`)
 - `GET /api/candidates/:id` — single candidate (includes `raw_text`)
 - `DELETE /api/candidates/:id` — delete candidate + file + scores
-- `POST /api/match` — score candidates against a JD
+- `POST /api/match` — score candidates against a JD. Body: `{"description": "<JD text, min 20 chars>", "title": "<optional>"}`
 - `GET /api/rankings/:job_id` — cached match rankings (uses RPC)
 - `POST /api/ask` — RAG question (creates conversation if needed)
 - `POST /api/ask-stream` — streaming RAG via SSE (events: `sources`, `token`, `done`, `error`)

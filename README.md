@@ -346,7 +346,7 @@ Every endpoint (except health check) requires a `Authorization: Bearer <jwt>` he
 | `GET` | `/api/candidates` | Yes | List candidates (`?sort=`, `?order=`, `?skill=`) |
 | `GET` | `/api/candidates/:id` | Yes | Get single candidate (includes `raw_text`) |
 | `DELETE` | `/api/candidates/:id` | Yes | Delete candidate + file + related scores |
-| `POST` | `/api/match` | Yes | Score candidates against a job description |
+| `POST` | `/api/match` | Yes | Score candidates against a JD — body `{"description": "<JD text, min 20 chars>", "title": "<optional>"}` |
 | `GET` | `/api/rankings/:job_id` | Yes | Get cached match rankings (via RPC) |
 | `POST` | `/api/ask` | Yes | RAG Q&A question (creates conversation if needed) |
 | `POST` | `/api/ask-stream` | Yes | Streaming RAG via SSE (`sources`, `token`, `done` events) |
