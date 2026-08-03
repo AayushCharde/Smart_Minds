@@ -7,7 +7,7 @@
   <img src="https://img.shields.io/badge/Supabase-PostgreSQL-3FCF8E?logo=supabase&logoColor=white" alt="Supabase" />
   <img src="https://img.shields.io/badge/Clerk-Auth-6C47FF?logo=clerk&logoColor=white" alt="Clerk" />
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker" />
-  <img src="https://img.shields.io/badge/License-MIT-22C55E" alt="MIT License" />
+  <img src="https://img.shields.io/badge/License-GPLv3-22C55E" alt="GPLv3 License" />
 </p>
 
 # HireMinds AI
@@ -438,7 +438,7 @@ The backend validates configuration at startup and will:
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the [GNU GPLv3 License](LICENSE).
 
 ---
 
